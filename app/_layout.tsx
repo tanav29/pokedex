@@ -1,10 +1,10 @@
 import { Stack } from "expo-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ConvexReactClient } from "convex/react";
+import { ConvexReactClient, useConvexAuth } from "convex/react";
 import "./globals.css";
 import * as SecureStore from "expo-secure-store";
 import { Platform , ActivityIndicator, View } from "react-native";
-import { ConvexAuthProvider, useAuth } from "@convex-dev/auth/react";
+import { ConvexAuthProvider } from "@convex-dev/auth/react";
 
 const queryClient = new QueryClient();
 
@@ -19,7 +19,7 @@ const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!, {
 });
 
 function AuthenticatedLayout() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated } = useConvexAuth();
 
   if (isLoading) {
     return (
