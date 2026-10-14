@@ -6,10 +6,17 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [Google],
   callbacks: {
     async redirect({ redirectTo }) {
-      if (
-        redirectTo !== "exp://d4qgmug-tanav-8081.exp.direct" &&
-        redirectTo !== "http://localhost:3000"
-      ) {
+      const allowedRedirects = new Set([
+        "exp://d4qgmug-tanav-8081.exp.direct",
+        "http://localhost:3000",
+        "http://localhost:8081",
+        "pokedex://",
+        ...(process.env.AUTH_ALLOWED_REDIRECTS ?? "")
+          .split(",")
+          .map((url) => url.trim())
+          .filter(Boolean),
+      ]);
+      if (!allowedRedirects.has(redirectTo)) {
         throw new Error(`Invalid redirectTo URI ${redirectTo}`);
       }
       return redirectTo;

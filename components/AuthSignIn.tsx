@@ -1,5 +1,5 @@
 import { useAuthActions } from "@convex-dev/auth/react";
-import { View, Text, TouchableNativeFeedback , Button, Platform } from "react-native";
+import { View, Text, Button, Platform, Alert } from "react-native";
 import { makeRedirectUri } from "expo-auth-session";
 import { openAuthSessionAsync } from "expo-web-browser";
 import { useRouter } from "expo-router";
@@ -11,19 +11,25 @@ export function SignIn() {
   const router = useRouter();
 
   const handleSignIn = async () => {
-    const { redirect } = await signIn("google", {
-      redirectTo,
-    });
-    if (Platform.OS === "web") {
-      return;
-    }
-    const result = await openAuthSessionAsync(redirect!.toString(), redirectTo);
-    if (result.type === "success") {
-      const { url } = result;
-      const code = new URL(url).searchParams.get("code")!;
-      await signIn("google", { code });
-      // Redirect to home after successful sign-in
-      router.replace("/(tabs)");
+    try {
+      const { redirect } = await signIn("google", { redirectTo });
+      if (!redirect) return;
+
+      if (Platform.OS === "web") {
+        window.location.assign(redirect.toString());
+        return;
+      }
+
+      const result = await openAuthSessionAsync(redirect.toString(), redirectTo);
+      if (result.type === "success") {
+        const code = new URL(result.url).searchParams.get("code");
+        if (!code) throw new Error("The sign-in callback did not include a code.");
+        await signIn("google", { code });
+        router.replace("/(tabs)");
+      }
+    } catch (error) {
+      console.error("Google sign-in failed:", error);
+      Alert.alert("Sign-in failed", "Please try signing in again.");
     }
   };
 

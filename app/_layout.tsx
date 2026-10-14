@@ -4,7 +4,7 @@ import { ConvexReactClient } from "convex/react";
 import "./globals.css";
 import * as SecureStore from "expo-secure-store";
 import { Platform , ActivityIndicator, View } from "react-native";
-import { ConvexAuthProvider, useAuthToken } from "@convex-dev/auth/react";
+import { ConvexAuthProvider, useAuth } from "@convex-dev/auth/react";
 
 const queryClient = new QueryClient();
 
@@ -19,9 +19,9 @@ const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!, {
 });
 
 function AuthenticatedLayout() {
-  const token = useAuthToken();
+  const { isLoading, isAuthenticated } = useAuth();
 
-  if (token === undefined) {
+  if (isLoading) {
     return (
       <View className="flex-1 justify-center items-center">
         <ActivityIndicator size="large" />
@@ -29,7 +29,7 @@ function AuthenticatedLayout() {
     );
   }
 
-  if (!token) {
+  if (!isAuthenticated) {
     return (
       <Stack>
         <Stack.Screen name="signin" options={{ headerShown: false }} />

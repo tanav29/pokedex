@@ -1,36 +1,10 @@
 import { Link } from "expo-router";
-import { FlatList, View, Text, Image, Pressable, ActivityIndicator } from "react-native";
+import { FlatList, View, Text, Pressable, ActivityIndicator } from "react-native";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
 export default function Favorites() {
   const favorites = useQuery(api.favorites.getUserFavorites);
-
-  const color = (types: string[]) => {
-    const type = types[0]; // Use first type for color
-    const colors: Record<string, string> = {
-      normal: "#E4E4E7",
-      fire: "#FFD6C9",
-      water: "#CFE5FF",
-      electric: "#FFE08A",
-      grass: "#CDECCD",
-      ice: "#CDEFF6",
-      fighting: "#F4B8B8",
-      poison: "#D9C2F0",
-      ground: "#E6D3A3",
-      flying: "#D6DCFF",
-      psychic: "#FFC1D9",
-      bug: "#DDE8B5",
-      rock: "#D6CCB5",
-      ghost: "#C9C3E6",
-      dragon: "#C4B8FF",
-      dark: "#C6C6C6",
-      steel: "#D1D9E6",
-      fairy: "#FFD1E6",
-    };
-
-    return colors[type] || "#E4E4E7";
-  };
 
   if (!favorites) {
     return (

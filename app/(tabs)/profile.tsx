@@ -3,7 +3,6 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Link } from "expo-router";
-import { auth } from "@/convex/auth";
 
 export default function Profile() {
   const { signOut } = useAuthActions();
@@ -37,10 +36,12 @@ export default function Profile() {
     >
       {user ? (
         <>
-          <Image
-            source={{ uri: user.image }}
-            style={{ width: 100, height: 100, borderRadius: 50, marginBottom: 16 }}
-          />
+          {user.image ? (
+            <Image
+              source={{ uri: user.image }}
+              style={{ width: 100, height: 100, borderRadius: 50, marginBottom: 16 }}
+            />
+          ) : null}
           <Text style={{ fontSize: 24, fontWeight: "bold", marginBottom: 8 }}>
             {user.name}
           </Text>

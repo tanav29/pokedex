@@ -1,27 +1,40 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 
-interface Pokemon {
-  name: string;
-  fimage: string;
-  bimage: string;
-  fshiny: string;
-  bshiny: string;
-  types: string;
-  weight: string;
-  shiny: boolean;
+interface PokemonListResponse {
+  next: string | null;
+  results: { name: string; url: string }[];
+}
+
+interface PokemonDetailsResponse {
+  sprites: {
+    front_default: string | null;
+    back_default: string | null;
+    front_shiny: string | null;
+    back_shiny: string | null;
+  };
+  types: { type: { name: string } }[];
+  weight: number;
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`PokéAPI request failed (${response.status})`);
+  }
+  return response.json() as Promise<T>;
 }
 
 export function usePokemonList() {
   return useInfiniteQuery({
     queryKey: ["pokemons", "list"],
     queryFn: async ({ pageParam = 0 }) => {
-      const res = await fetch(`https://pokeapi.co/api/v2/pokemon?offset=${pageParam}&limit=10`);
-      const data = await res.json();
+      const data = await fetchJson<PokemonListResponse>(
+        `https://pokeapi.co/api/v2/pokemon?offset=${pageParam}&limit=10`,
+      );
 
       const detailedPokemons = await Promise.all(
-        data.results.map(async (p: any) => {
-          const res = await fetch(p.url);
-          const details = await res.json();
+        data.results.map(async (p) => {
+          const details = await fetchJson<PokemonDetailsResponse>(p.url);
           return {
             name: p.name,
             fimage: details.sprites.front_default,
@@ -45,20 +58,16 @@ export function usePokemonList() {
   });
 }
 
-interface PokemonName {
-  name: string;
-  url: string;
-}
-
 export function usePokemonNames() {
   return useInfiniteQuery({
     queryKey: ["pokemons", "names"],
     queryFn: async ({ pageParam = 0 }) => {
-      const res = await fetch(`https://pokeapi.co/api/v2/pokemon?offset=${pageParam}&limit=100`);
-      const data = await res.json();
+      const data = await fetchJson<PokemonListResponse>(
+        `https://pokeapi.co/api/v2/pokemon?offset=${pageParam}&limit=100`,
+      );
 
       return {
-        names: data.results as PokemonName[],
+        names: data.results,
         nextOffset: data.next ? pageParam + 100 : null,
       };
     },

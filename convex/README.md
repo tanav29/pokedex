@@ -88,3 +88,10 @@ function handleButtonPress() {
 Use the Convex CLI to push your functions to a deployment. See everything
 the Convex CLI can do by running `npx convex -h` in your project root
 directory. To learn more, launch the docs with `npx convex docs`.
+
+## Authentication redirects
+
+The Google OAuth redirect callback allows the app's `pokedex://` scheme and
+common local development URLs. For a deployed web app or a different Expo
+development URL, set `AUTH_ALLOWED_REDIRECTS` in the Convex deployment to a
+comma-separated list of the exact callback URLs accepted by the app.

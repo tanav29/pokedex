@@ -33,40 +33,59 @@ interface PokemonDetails {
 }
 
 const Details = () => {
-  const { name } = useLocalSearchParams();
+  const { name } = useLocalSearchParams<{ name?: string | string[] }>();
+  const pokemonName = Array.isArray(name) ? name[0] : name;
   const [pokemon, setPokemon] = useState<PokemonDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [male, setMale] = useState(true);
   const [shiny, setShiny] = useState(false);
 
-  const isFav = useQuery(api.favorites.isFavorite, {
-    pokemonName: name as string,
-  });
+  const isFav = useQuery(
+    api.favorites.isFavorite,
+    pokemonName ? { pokemonName } : "skip",
+  );
   const toggleFav = useMutation(api.favorites.toggleFavorite);
 
   useEffect(() => {
-    if (name) {
-      fetchPokemonDetails(name as string);
-    }
-  }, [name]);
+    let cancelled = false;
+    const controller = new AbortController();
 
-  async function fetchPokemonDetails(pokemonName: string) {
-    try {
-      const res = await fetch(
-        `https://pokeapi.co/api/v2/pokemon/${pokemonName}`,
-      );
-      const data = await res.json();
-      setPokemon(data);
-      setLoading(false);
-    } catch (e) {
-      console.log(e);
-      setLoading(false);
+    async function loadPokemon() {
+      setLoading(true);
+      setPokemon(null);
+      if (!pokemonName) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `https://pokeapi.co/api/v2/pokemon/${encodeURIComponent(pokemonName)}`,
+          { signal: controller.signal },
+        );
+        if (!response.ok) throw new Error(`PokéAPI returned ${response.status}`);
+        const data: PokemonDetails = await response.json();
+        if (!cancelled) setPokemon(data);
+      } catch (error) {
+        if (!cancelled && !controller.signal.aborted) {
+          console.error("Failed to load Pokémon details:", error);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-  }
+
+    void loadPokemon();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [pokemonName]);
 
   const handleToggleFavorite = async () => {
     try {
-      await toggleFav({ pokemonName: name as string });
+      if (!pokemonName) return;
+      await toggleFav({ pokemonName });
     } catch (error) {
       console.error("Failed to toggle favorite:", error);
     }
