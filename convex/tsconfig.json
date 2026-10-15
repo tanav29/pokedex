@@ -18,8 +18,14 @@
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "isolatedModules": true,
-    "noEmit": true
+    "noEmit": true,
+
+    /* Convex functions run on the server and read secrets such as
+     * CONVEX_SITE_URL and AUTH_ALLOWED_REDIRECTS via `process.env`, so the
+     * Node.js globals must be in scope here. */
+    "types": ["node"]
   },
   "include": ["./**/*"],
   "exclude": ["./_generated"]
 }
+

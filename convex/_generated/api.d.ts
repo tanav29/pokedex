@@ -10,7 +10,11 @@
 
 import type * as auth from "../auth.js";
 import type * as favorites from "../favorites.js";
+import type * as game from "../game.js";
+import type * as gameActions from "../gameActions.js";
 import type * as http from "../http.js";
+import type * as lib_gameLogic from "../lib/gameLogic.js";
+import type * as lib_quests from "../lib/quests.js";
 
 import type {
   ApiFromModules,
@@ -21,7 +25,11 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   favorites: typeof favorites;
+  game: typeof game;
+  gameActions: typeof gameActions;
   http: typeof http;
+  "lib/gameLogic": typeof lib_gameLogic;
+  "lib/quests": typeof lib_quests;
 }>;
 
 /**

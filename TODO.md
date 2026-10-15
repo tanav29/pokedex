@@ -1,53 +1,58 @@
-Beginner-Friendly Features 🟢
-Search & Filter (Text Input, State Management)
-  - Add a search bar to filter Pokemon by name
-  - Learn: TextInput, controlled components, array filtering
-Pull to Refresh (Built-in Components)
-  - Add pull-to-refresh to reload Pokemon data
-  - Learn: RefreshControl, async operations
-Pokemon Stats Charts (Custom Components)
-  - Visualize Pokemon stats with progress bars or simple charts
-  - Learn: custom components, data visualization
+# Game systems
 
-Intermediate Features 🟡
-Favorites System (Local Storage)
-  - Allow users to favorite Pokemon with a heart icon
-  - Learn: AsyncStorage, persistent state, icons
-Dark Mode Toggle (Theme System)
-  - Global dark/light mode switcher
-  - Learn: Context API, theme providers, styled components
-Pokemon Evolution Chains (Complex API Calls)
-  - Show evolution trees for each Pokemon
-  - Learn: nested API calls, complex data structures
-Infinite Scroll/Pagination (Performance)
-  - Load more Pokemon as user scrolls
-  - Learn: FlatList optimization, pagination APIs
-  
-Advanced Features 🔴
-Pokemon Team Builder (Drag & Drop)
-  - Create teams with drag-and-drop functionality
-  - Learn: react-native-reanimated, gesture handling, complex state
-Offline Mode (Caching)
-  - Cache Pokemon data for offline viewing
-  - Learn: network detection, caching strategies
-Pokemon Battle Simulator (Complex State)
-  - Simple battle mechanics between Pokemon
-  - Learn: game logic, multiple state management
-Sound Effects (Audio)
-  - Add Pokemon cries and battle sounds
-  - Learn: expo-av, audio playback
-Animations & Transitions (UI/UX)
-  - Smooth transitions between screens, sprite animations
-  - Learn: react-native-reanimated, animation libraries
-Real-time Pokemon Comparison (Advanced UI)
-  - Side-by-side Pokemon comparison with swipe gestures
-  - Learn: advanced layouts, gesture recognition
-  
-Learning Path Suggestions 📚
-If I were learning React Native, I'd recommend this progression:
-1. Start with Search → teaches basic user input
-2. Add Favorites → teaches data persistence  
-3. Implement Dark Mode → teaches global state
-4. Add Animations → teaches performance concepts
-5. Build Team Builder → teaches complex interactions
-Which of these interests you most? Or do you have a specific concept you want to learn (like animations, storage, navigation, etc.)? I can provide detailed implementation plans for any of them! 🚀
+The app started as a PokéAPI browser. It is now a loop:
+
+> **throw a ball → see what came out → watch the level move → spend it**
+
+Everything below is implemented and server-authoritative. `convex/lib/gameLogic.ts`
+holds the pure rules (XP curve, pool size, type chart, ball odds) and is imported by
+both the backend and the app, so the client can render the same numbers without a
+round trip.
+
+## The loop
+
+| System | Where | Notes |
+| --- | --- | --- |
+| Poké Ball pulls | `convex/gameActions.ts` → `throwBall` | The roll (species + shiny) happens server-side; the client learns the outcome only after the write lands |
+| Trainer levels | `convex/game.ts` → `grantRewards` | XP needed to advance from L is `80 + 40(L-1)` |
+| Species pool | `poolCap(level)` | Kanto at level 1, +8 species per level, all 1002 by level 107. Leveling opens somewhere new rather than gating a feature |
+| Ball tiers | `BALL_TIERS` | Poké 1/48 shiny, Great 1/24, Ultra 1/10. Better odds and better XP per tier |
+| Passive timer | `settleBalls` | +1 Poké Ball every 20 min, capped at 10. Computed on read, flushed on write |
+| Daily reward + streak | `claimDaily` | Escalates over 7 days; a missed day resets the streak. All day boundaries are UTC |
+| Quests | `convex/lib/quests.ts` | 3 daily (rotating deterministically by day) + 12 lifetime. **Paid on completion** — there is no claim button |
+| Battles | `app/battle.tsx` | Turn-based on the client, outcome reported to Convex |
+| Coins + shop | `buyBall` | The only sink, so coins mean something |
+| Leaderboard | `getLeaderboard` | Top 100 by XP |
+
+## Tuning knobs
+
+All in `convex/lib/gameLogic.ts` — these are the dials to turn if the loop feels
+too fast or too slow:
+
+- `xpToNext` — how fast levels arrive
+- `POOL_PER_LEVEL` — how much new content a level opens
+- `BALL_TIERS[*].shinyOdds` — how chaseable a shiny is (the main "one more" lever)
+- `BALL_REGEN_MS` / `BALL_REGEN_CAP` — how often the app pulls you back
+- `dailyRewardFor` — how punishing a missed day is
+
+## Known simplifications
+
+- **Battles resolve on the client.** The fight is simulated from PokéAPI stats and
+  only the result is sent to the server, so it is not cheat-proof. Fine for a
+  friends-and-family dex; move turn resolution server-side if it ever matters.
+- **A determined client can call `commitCatch` directly** with a species of its
+  choosing. The shiny roll and ball accounting are still server-side, so this buys
+  a chosen Pokémon, not free rewards.
+- **`getLeaderboard` reads the top 100 only.** Ranking below that returns `null`
+  rather than scanning the whole table.
+- **Species metadata warms lazily.** PokéAPI has no bulk "types of the first 151"
+  endpoint, so `primeSpeciesMeta` fills the cache a batch at a time in the
+  background. Uncaught tiles show a dex number until it lands.
+
+## Not built yet
+
+- Evolution chains — the API calls are straightforward, the interesting part is
+  deciding what evolving a species is *worth*
+- Team builder — needs a real `party` table and drag-and-drop over reanimated
+- Battle abilities and status effects — currently a pure stat + type matchup
+- Push notifications for the ball timer, which is the mechanic most in need of it

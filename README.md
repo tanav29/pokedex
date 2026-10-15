@@ -1,8 +1,12 @@
-# Welcome to your Expo app 👋
+# Pokédex
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+An Expo app that turns a PokéAPI browser into a collecting game: throw Poké Balls,
+catch Pokémon, level up your trainer, work the daily quest list, and spend your
+coins on better balls.
 
-## Get started
+Built with Expo Router, NativeWind, Convex (auth + game state) and TanStack Query.
+
+## Getting started
 
 1. Install dependencies
 
@@ -21,30 +25,48 @@ In the output, you'll find options to open the app in a
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)
 - [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
 - [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- [Expo Go](https://docs.expo.dev/go), a limited sandbox for trying out app development with Expo
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## How the game works
 
-## Get a fresh project
+The loop is **throw a ball → see what came out → watch the level move → spend it**.
+Species, shiny rolls, XP and currency are all decided on the server, so the app
+never shows a Pokémon the backend did not award.
 
-When you're ready, run:
+- **Balls** refill passively (one every 20 minutes, capped at 10) and the countdown
+  is on the main screen — that timer is the app's main reason to be reopened.
+- **Levels** widen the species pool instead of gating a feature, so progress always
+  opens somewhere new.
+- **Quests** pay out the instant they complete. There is no claim button.
+- **Daily streaks** escalate over a week and lapse if you miss a day.
 
-```bash
-npm run reset-project
+`TODO.md` documents every system, where it lives, and which constants to turn if the
+pace feels wrong. `docs/design-preview.html` renders the screens with the real
+tokens and fonts.
+
+## Project layout
+
 ```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+app/                 routes — (tabs) holds encounter / dex / quests / trainer
+components/game/     PokeBall, RevealCard, DexCell, QuestRow, TrainerHeader, …
+components/ui/       Txt — the two-family type system every screen goes through
+convex/game.ts       queries + mutations (profile, catches, quests, battles)
+convex/gameActions.ts actions that need the network (pull roll, rival, cache warm)
+convex/lib/          pure rules shared with the client — no convex imports
+lib/                 design tokens, haptics, formatting
+```
 
 ## Learn more
 
-To learn more about developing your project with Expo, look at the following resources:
+- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into
+  advanced topics with our [guides](https://docs.expo.dev/guides).
+- [Convex documentation](https://docs.convex.dev/)
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Notes for future changes
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Game rules live in `convex/lib/gameLogic.ts` and import nothing from `convex/*`.
+  That is what lets the app render the same numbers without a round trip.
+- Actions that call `internal.*` must not live in the same module as the functions
+  they call. The generated `api.d.ts` folds every module into one `fullApi`, so the
+  reference cycles back through the caller and TypeScript never terminates
+  inference. See `convex/gameActions.ts` for the note.

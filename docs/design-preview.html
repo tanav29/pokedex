@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pokédex — game loop &amp; visual direction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ---- tokens, mirroring lib/theme.ts ---- */
+  :root{
+    --ink:#141620; --ink-raised:#1D2030; --ink-sunken:#0E1017;
+    --line:#2C3044; --line-soft:#222638;
+    --paper:#EDEAE0; --paper-dim:#8B8FA6; --paper-faint:#5D6178;
+    --ball:#E2483F; --ball-dim:#8E2F2A;
+    --foil:#5FD3C4; --foil-dim:#2E6B66;
+    --gold:#E9B23C;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:#0a0b10; color:var(--paper);
+    font-family:'Outfit',system-ui,sans-serif;
+    padding:40px 24px 72px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:'Martian Mono',monospace}
+  .intro{max-width:1180px;margin:0 auto 36px}
+  .intro h1{font-size:30px;font-weight:800;letter-spacing:-.01em}
+  .intro p{color:var(--paper-dim);font-size:15px;line-height:1.65;max-width:68ch;margin-top:10px}
+  .swatches{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .sw{width:104px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--ink-raised)}
+  .sw i{display:block;height:44px}
+  .sw b{display:block;font:600 10px/1.5 'Martian Mono',monospace;color:var(--paper-dim);padding:6px 8px;letter-spacing:.4px}
+
+  .phones{display:flex;flex-wrap:wrap;gap:28px;justify-content:center;max-width:1180px;margin:0 auto}
+  .phone-col{display:flex;flex-direction:column;gap:10px;align-items:center}
+  .phone-label{font:600 10px/1 'Martian Mono',monospace;letter-spacing:1.4px;color:var(--paper-faint);text-transform:uppercase}
+  .phone{
+    width:340px;height:700px;background:var(--ink);border:1px solid var(--line);
+    border-radius:26px;overflow:hidden;display:flex;flex-direction:column;position:relative;
+  }
+  .tabbar{height:58px;border-top:1px solid var(--line-soft);background:var(--ink-sunken);
+    display:flex;align-items:center;justify-content:space-around;flex:0 0 auto}
+  .tab{font:600 10px/1 'Outfit',sans-serif;color:var(--paper-faint);text-align:center;gap:3px}
+  .tab.on{color:var(--ball)}
+  .tab .dot{width:19px;height:19px;border:1.6px solid currentColor;border-radius:50%;margin:0 auto 4px}
+  .tab .dot.sq{border-radius:5px}
+  .tab .dot.chk{border-radius:5px;width:15px;height:15px}
+  .tab .dot.pe{width:15px;height:15px;border-radius:50%}
+
+  /* ---- trainer header ---- */
+  .th{padding:14px 16px 12px;border-bottom:1px solid var(--line)}
+  .th-top{display:flex;align-items:center;gap:12px}
+  .lvl{display:flex;align-items:baseline;gap:6px}
+  .lvl b{font-size:21px;color:var(--ball);font-weight:700}
+  .lbl{font:500 10px/1 'Martian Mono',monospace;letter-spacing:.8px;color:var(--paper-faint)}
+  .xpwrap{flex:1}
+  .xpfoot{display:flex;justify-content:space-between;margin-top:4px}
+  .xpfoot span{font:400 10px/1 'Martian Mono',monospace;color:var(--paper-faint)}
+  .track{height:6px;border-radius:3px;background:var(--ink-sunken);border:1px solid var(--line-soft);overflow:hidden}
+  .track i{display:block;height:100%;background:var(--ball)}
+  .stats{display:flex;align-items:center;gap:14px;margin-top:12px}
+  .stat{display:flex;align-items:center;gap:5px}
+  .stat b{font:700 12px/1 'Martian Mono',monospace}
+  .stat span{font-size:11px;color:var(--paper-faint)}
+
+  /* ---- daily strip ---- */
+  .daily{display:flex;align-items:center;gap:11px;padding:10px 16px;border-bottom:1px solid var(--line-soft)}
+  .daily .flame{width:15px;height:15px;border-radius:50% 50% 50% 0;background:var(--ball);transform:rotate(-45deg);flex:0 0 auto}
+  .daily .flame.off{background:var(--paper-faint)}
+  .daily .txt{flex:1}
+  .daily .txt b{display:block;font-weight:600;font-size:13px}
+  .daily .txt span{font-size:11px;color:var(--paper-faint)}
+  .btn{background:var(--ball);color:var(--ink);border:0;border-radius:8px;padding:7px 14px;
+    font:700 13px/1 'Outfit',sans-serif;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--paper-dim);border:1px solid var(--line)}
+  .btn.big{background:var(--ball);color:var(--ink);border:0;border-radius:12px;padding:15px;width:100%;
+    font:700 16px/1 'Outfit',sans-serif}
+  .btn.ghost.big{background:var(--ink-raised);border:1px solid var(--line);color:var(--paper);padding:14px}
+
+  /* ---- pokeball ---- */
+  .stage{flex:1;display:flex;align-items:center;justify-content:center}
+  .ball{position:relative;width:180px;height:180px}
+  .ball .h{position:absolute;left:0;width:100%;height:50%}
+  .ball .top{top:0;background:var(--ball);border-radius:90px 90px 0 0}
+  .ball .bot{bottom:0;background:var(--paper);border-radius:0 0 90px 90px}
+  .ball .band{position:absolute;top:50%;left:0;right:0;height:9px;background:var(--ink);transform:translateY(-50%)}
+  .ball .btn-o{position:absolute;top:50%;left:50%;width:54px;height:54px;border-radius:50%;
+    background:var(--paper);border:4px solid var(--ink);transform:translate(-50%,-50%);
+    display:flex;align-items:center;justify-content:center}
+  .ball .btn-i{width:27px;height:27px;border-radius:50%;background:var(--ink)}
+  .ball.great .top{background:#3D8FD6} .ball.great .band{background:#3D8FD6}
+  .ball.ultra .top{background:var(--ink)} .ball.ultra .bot{background:var(--gold)} .ball.ultra .btn-o{background:var(--gold)}
+  .hint{text-align:center;font:600 12px/1 'Outfit',sans-serif;color:var(--paper-dim);margin-top:14px}
+
+  /* ---- tier row ---- */
+  .tiers{display:flex;gap:8px;padding:0 16px}
+  .tier{flex:1;border:1px solid var(--line-soft);background:var(--ink);border-radius:12px;
+    padding:10px 8px;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .tier.on{border-color:var(--ball);background:rgba(226,72,63,.08)}
+  .tier .nm{font:600 11px/1 'Outfit',sans-serif;color:var(--paper-dim)}
+  .tier.on .nm{color:var(--paper)}
+  .tier .ct{font:700 13px/1 'Martian Mono',monospace}
+  .tier .od{font:400 9px/1 'Martian Mono',monospace;color:var(--paper-faint)}
+  .mini{width:26px;height:26px}
+  .timer{padding:12px 16px 14px}
+  .timer .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .timer .row b{font:700 11px/1 'Martian Mono',monospace;color:var(--paper-dim)}
+
+  /* ---- reveal ---- */
+  .plate{background:var(--ink-raised);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+  .plate.foil{border-color:var(--foil)}
+  .plate .bar{height:6px;background:var(--gold)}
+  .plate.foil .bar{background:var(--foil)}
+  .plate .in{padding:16px 20px 20px;text-align:center}
+  .sprite{width:168px;height:168px;margin:4px auto 2px;display:grid;place-items:center}
+  .sprite img{width:100%;height:100%;image-rendering:pixelated;filter:drop-shadow(0 6px 18px rgba(0,0,0,.5))}
+  .nm{font-size:27px;font-weight:800;letter-spacing:-.01em}
+  .chips{display:flex;gap:6px;justify-content:center;margin-top:8px;flex-wrap:wrap}
+  .chip{padding:3px 8px;border-radius:4px;font:700 11px/1.3 'Outfit',sans-serif;color:var(--ink)}
+  .stamp{display:inline-block;margin-top:14px;padding:5px 12px;border-radius:6px;
+    font:700 11px/1 'Martian Mono',monospace;letter-spacing:1.2px;color:var(--ink);transform:rotate(-3deg)}
+  .payout{display:flex;gap:24px;justify-content:center;margin-top:16px;align-items:center}
+  .payout .it{display:flex;align-items:center;gap:5px}
+  .payout b{font:700 16px/1 'Martian Mono',monospace}
+  .payout span{font-size:12px;color:var(--paper-faint)}
+  .tapme{text-align:center;font-size:12px;color:var(--paper-faint);margin-top:14px}
+
+  /* ---- dex ---- */
+  .dexhead{padding:14px 16px 10px}
+  .dh-row{display:flex;align-items:flex-end;justify-content:space-between}
+  .count{font-size:26px;font-weight:800;line-height:1}
+  .count em{font:400 14px/1 'Martian Mono',monospace;color:var(--paper-faint);font-style:normal}
+  .iconbtn{width:32px;height:32px;border:1px solid var(--line);border-radius:8px;display:grid;place-items:center;
+    font:700 11px/1 'Martian Mono',monospace;color:var(--paper-dim)}
+  .search{margin-top:12px;background:var(--ink-raised);border:1px solid var(--line);border-radius:14px;
+    padding:9px 12px;font-size:14px;color:var(--paper-faint)}
+  .filters{display:flex;gap:6px;padding:10px 16px;overflow:hidden}
+  .f{padding:5px 10px;border-radius:4px;font:600 11px/1 'Outfit',sans-serif;opacity:.42}
+  .f.on{opacity:1;color:var(--ink)}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 16px 20px}
+  .cell{border:1px solid var(--line);background:var(--ink-raised);border-radius:14px;
+    padding:6px 4px 8px;text-align:center;position:relative;overflow:hidden}
+  .cell.miss{border-color:var(--line-soft);background:var(--ink)}
+  .cell .img{width:100%;aspect-ratio:1;display:grid;place-items:center}
+  .cell img{width:78%;image-rendering:pixelated}
+  .cell.miss img{opacity:.13}
+  .cell .cn{font:600 11px/1.3 'Outfit',sans-serif;display:block;padding:0 3px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cell.miss .cn{font:400 10px/1.4 'Martian Mono',monospace;color:#3A3F55}
+  .cell .chips{margin-top:3px;gap:3px}
+  .cell .chip{font-size:10px;padding:1px 6px}
+  .cell .count{position:absolute;right:6px;bottom:5px;font:700 9px/1 'Martian Mono',monospace;color:var(--paper-faint)}
+  .foilmark{position:absolute;top:0;right:0;background:var(--foil);border-radius:0 0 0 8px;padding:2px 5px;
+    font:800 8px/1 'Martian Mono',monospace;color:var(--ink)}
+  .wash{position:absolute;top:-30%;left:-15%;width:130%;height:70%;border-radius:50%;opacity:.16}
+
+  /* ---- quests ---- */
+  .qhead{padding:16px 16px 0}
+  .qhead h3{font-size:26px;font-weight:800;line-height:1}
+  .qhead p{font-size:12px;color:var(--paper-faint);margin-top:2px}
+  .qsec{margin-top:20px}
+  .qsec .hd{display:flex;justify-content:space-between;align-items:baseline;padding:0 2px 6px}
+  .qsec .hd b{font:500 10px/1 'Martian Mono',monospace;letter-spacing:.8px;color:var(--paper-faint)}
+  .qsec .hd span{font-size:11px;color:var(--paper-faint)}
+  .qlist{background:var(--ink-raised);border:1px solid var(--line);border-radius:14px;padding:0 12px}
+  .q{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line-soft)}
+  .q:last-child{border-bottom:0}
+  .qico{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--ink-raised);
+    display:grid;place-items:center;flex:0 0 auto;font:700 14px/1 'Outfit',sans-serif;color:var(--paper-dim)}
+  .qico.done{background:rgba(95,211,196,.12);border-color:var(--foil-dim);color:var(--foil)}
+  .qmain{flex:1;display:flex;flex-direction:column;gap:6px}
+  .qmain .t{font:600 14px/1 'Outfit',sans-serif}
+  .qmain .p{font:400 10px/1 'Martian Mono',monospace;color:var(--paper-faint)}
+  .qrew{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+  .qrew b{font:700 12px/1 'Martian Mono',monospace}
+
+  /* ---- battle ---- */
+  .bwrap{padding:12px 16px 0}
+  .btop{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .btop .chev{color:var(--paper-dim);font-size:20px}
+  .fp{border:1px solid var(--line);background:var(--ink-raised);border-radius:14px;padding:12px;
+    display:flex;gap:12px;align-items:center}
+  .fp.rev{flex-direction:row-reverse}
+  .fp.fade{opacity:.55;border-color:var(--ball)}
+  .fp .s{width:96px;height:96px;flex:0 0 auto;display:grid;place-items:center}
+  .fp.rev .s{width:78px;height:78px}
+  .fp img{width:100%;image-rendering:pixelated}
+  .fp .info{flex:1;display:flex;flex-direction:column;gap:6px}
+  .fp .nrow{display:flex;justify-content:space-between;align-items:baseline}
+  .fp .nm2{font:700 16px/1 'Outfit',sans-serif}
+  .fp .hp{font:700 11px/1 'Martian Mono',monospace}
+  .minis{display:flex;gap:12px;padding-top:2px}
+  .mini-s{display:flex;align-items:baseline;gap:4px}
+  .log{margin-top:14px;background:var(--ink-raised);border:1px solid var(--line);border-radius:14px;
+    padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-height:74px}
+  .log p{font-size:12px;line-height:17px;color:var(--paper-dim)}
+  .log p.good{color:var(--foil)} .log p.bad{color:var(--ball)}
+  .matchup{margin-top:10px;display:flex;align-items:center;gap:7px;font-size:12px;color:var(--paper-dim)}
+  .foot{margin-top:auto;padding:0 16px 16px;display:flex;gap:12px}
+  .foot .btn.big{flex:2} .foot .btn.ghost.big{flex:1;padding:14px}
+
+  .legend{max-width:1180px;margin:34px auto 0;padding:20px 22px;border:1px solid var(--line);
+    border-radius:14px;background:var(--ink-raised)}
+  .legend h4{font:500 10px/1 'Martian Mono',monospace;letter-spacing:.8px;color:var(--paper-faint);margin-bottom:12px}
+  .legend ul{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+  .legend li{font-size:13px;line-height:1.55;color:var(--paper-dim)}
+  .legend li b{color:var(--paper);font-weight:600}
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <h1>Pokédex, turned into a game</h1>
+  <p>
+    The original app was a browser with two verbs. This is a loop: throw a ball, see what came out,
+    watch a level bar move, spend the result. Everything below is the real build — these are the
+    screens as they ship, drawn with the same tokens and fonts the app uses.
+  </p>
+  <div class="swatches">
+    <div class="sw"><i style="background:#141620"></i><b>ink ground</b></div>
+    <div class="sw"><i style="background:#1D2030"></i><b>ink raised</b></div>
+    <div class="sw"><i style="background:#2C3044"></i><b>line</b></div>
+    <div class="sw"><i style="background:#EDEAE0"></i><b>paper</b></div>
+    <div class="sw"><i style="background:#E2483F"></i><b>ball</b></div>
+    <div class="sw"><i style="background:#5FD3C4"></i><b>foil</b></div>
+    <div class="sw"><i style="background:#E9B23C"></i><b>gold</b></div>
+  </div>
+</div>
+
+<div class="phones">
+
+  <!-- 1. ENCOUNTER -->
+  <div class="phone-col">
+    <div class="phone-label">Encounter — the loop</div>
+    <div class="phone">
+      <div class="th">
+        <div class="th-top">
+          <div class="lvl"><b>7</b><span class="lbl">LEVEL</span></div>
+          <div class="xpwrap">
+            <div class="track"><i style="width:59%"></i></div>
+            <div class="xpfoot"><span>190 / 320 XP</span><span>199 in pool</span></div>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat"><b>5/2/1</b><span>balls</span></div>
+          <div class="stat"><b style="color:var(--gold)">2,480</b><span>coins</span></div>
+          <div class="stat"><b style="color:var(--ball)">12</b><span>day streak</span></div>
+          <div style="flex:1"></div>
+          <div class="stat"><b>96</b></div>
+        </div>
+      </div>
+      <div class="daily">
+        <div class="flame"></div>
+        <div class="txt"><b>12-day streak</b><span>Claim now or the streak lapses</span></div>
+        <button class="btn">Collect</button>
+      </div>
+      <div class="stage">
+        <div>
+          <div style="display:grid;place-items:center">
+            <div class="ball">
+              <div class="h top"></div><div class="h bot"></div>
+              <div class="band"></div>
+              <div class="btn-o"><div class="btn-i"></div></div>
+            </div>
+          </div>
+          <div class="hint">Tap to throw</div>
+        </div>
+      </div>
+      <div class="tiers">
+        <div class="tier on"><div class="ball mini"><div class="h top"></div><div class="h bot"></div><div class="band" style="height:3px"></div><div class="btn-o" style="width:9px;height:9px;border-width:1.5px"><div class="btn-i" style="width:4px;height:4px"></div></div></div><div class="nm">Poké</div><div class="ct">5</div><div class="od">1/48</div></div>
+        <div class="tier"><div class="ball mini great"><div class="h top"></div><div class="h bot"></div><div class="band" style="height:3px"></div><div class="btn-o" style="width:9px;height:9px;border-width:1.5px"><div class="btn-i" style="width:4px;height:4px"></div></div></div><div class="nm">Great</div><div class="ct">2</div><div class="od">1/24</div></div>
+        <div class="tier"><div class="ball mini ultra"><div class="h top"></div><div class="h bot"></div><div class="band" style="height:3px"></div><div class="btn-o" style="width:9px;height:9px;border-width:1.5px"><div class="btn-i" style="width:4px;height:4px"></div></div></div><div class="nm">Ultra</div><div class="ct">1</div><div class="od">1/10</div></div>
+      </div>
+      <div class="timer">
+        <div class="row"><span class="lbl">NEXT FREE POKé BALL</span><b>12m 22s</b></div>
+        <div class="track" style="height:3px"><i style="width:38%;background:var(--line)"></i></div>
+      </div>
+      <div class="tabbar">
+        <div class="tab on"><div class="dot"></div>Encounter</div>
+        <div class="tab"><div class="dot sq"></div>Dex</div>
+        <div class="tab"><div class="dot chk"></div>Quests</div>
+        <div class="tab"><div class="dot pe"></div>Trainer</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. REVEAL -->
+  <div class="phone-col">
+    <div class="phone-label">Reveal — the payoff</div>
+    <div class="phone">
+      <div class="th">
+        <div class="th-top">
+          <div class="lvl"><b>7</b><span class="lbl">LEVEL</span></div>
+          <div class="xpwrap"><div class="track"><i style="width:59%"></i></div>
+            <div class="xpfoot"><span>190 / 320 XP</span><span>199 in pool</span></div></div>
+        </div>
+        <div class="stats">
+          <div class="stat"><b>4/2/1</b><span>balls</span></div>
+          <div class="stat"><b style="color:var(--gold)">2,524</b><span>coins</span></div>
+          <div class="stat"><b style="color:var(--ball)">12</b><span>day streak</span></div>
+        </div>
+      </div>
+      <div class="stage" style="padding:0 20px">
+        <div style="width:100%">
+          <div class="plate foil">
+            <div class="bar"></div>
+            <div class="in">
+              <span class="lbl">#025</span>
+              <div class="sprite"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/shiny/25.png" alt=""></div>
+              <div class="nm">Pikachu</div>
+              <div class="chips"><span class="chip" style="background:#E9B23C">electric</span></div>
+              <div class="stamp" style="background:var(--foil)">SHINY</div>
+            </div>
+          </div>
+          <div class="payout">
+            <div class="it"><b>+52</b><span>XP</span></div>
+            <div class="it"><b style="color:var(--gold)">+44</b><span>coins</span></div>
+          </div>
+          <div class="tapme">Tap to keep searching</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab on"><div class="dot"></div>Encounter</div>
+        <div class="tab"><div class="dot sq"></div>Dex</div>
+        <div class="tab"><div class="dot chk"></div>Quests</div>
+        <div class="tab"><div class="dot pe"></div>Trainer</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. DEX -->
+  <div class="phone-col">
+    <div class="phone-label">Dex — the collection</div>
+    <div class="phone">
+      <div class="dexhead">
+        <div class="dh-row">
+          <div><div class="lbl">POKéDEX</div><div class="count">96<em> / 199</em></div></div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="stat"><b style="color:var(--foil)">3</b></div>
+            <div class="iconbtn">♡</div>
+            <div class="iconbtn" style="color:var(--ball);border-color:var(--ball)">⚡</div>
+          </div>
+        </div>
+        <div class="track" style="margin-top:12px;height:5px"><i style="width:48%;background:var(--foil)"></i></div>
+        <div class="search">Search your dex</div>
+      </div>
+      <div class="filters">
+        <span class="f on" style="background:var(--ink-raised);color:var(--paper-dim)">All</span>
+        <span class="f" style="background:#4FA35C">fire</span>
+        <span class="f" style="background:#3D8FD6">water</span>
+        <span class="f" style="background:#E9B23C">electric</span>
+        <span class="f" style="background:#9C8B5E">rock</span>
+      </div>
+      <div class="grid">
+        <div class="cell miss"><div class="img"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/1.png"></div><span class="cn">#001</span></div>
+        <div class="cell miss"><div class="img"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/2.png"></div><span class="cn">#002</span></div>
+        <div class="cell miss"><div class="img"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/3.png"></div><span class="cn">#003</span></div>
+        <div class="cell miss"><div class="img"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/4.png"></div><span class="cn">#004</span></div>
+        <div class="cell"><div class="wash" style="background:#F2703E"></div><div class="img"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/6.png"></div><span class="cn">Charmander</span><div class="chips"><span class="chip" style="background:#F2703E">fire</span></div><span class="count">×2</span></div>
+        <div class="cell"><div class="wash" style="background:#3D8FD6"></div><div class="img"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/7.png"></div><span class="cn">Squirtle</span><div class="chips"><span class="chip" style="background:#3D8FD6">water</span></div><span class="count">×9</span></div>
+        <div class="cell"><div class="wash" style="background:#4FA35C"></div><div class="img"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/1.png"></div><span class="cn">Bulbasaur</span><div class="chips"><span class="chip" style="background:#4FA35C">grass</span><span class="chip" style="background:#8B5FB0">poison</span></div><span class="count">×4</span></div>
+        <div class="cell miss"><div class="img"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/8.png"></div><span class="cn">#008</span></div>
+        <div class="cell miss"><div class="img"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/9.png"></div><span class="cn">#009</span></div>
+        <div class="cell"><div class="wash" style="background:#6B5FA8"></div><div class="img"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/94.png"></div><span class="cn">Gengar</span><div class="chips"><span class="chip" style="background:#6B5FA8">ghost</span><span class="chip" style="background:#8B5FB0">poison</span></div></div>
+        <div class="cell"><div class="wash" style="background:#5FC7C7"></div><div class="img"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/shiny/131.png"></div><span class="cn">Lapras</span><div class="chips"><span class="chip" style="background:#3D8FD6">water</span><span class="chip" style="background:#5FC7C7">ice</span></div><span class="foilmark">SHINY</span><span class="count">×3</span></div>
+        <div class="cell miss"><div class="img"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/11.png"></div><span class="cn">#011</span></div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="dot"></div>Encounter</div>
+        <div class="tab on"><div class="dot sq"></div>Dex</div>
+        <div class="tab"><div class="dot chk"></div>Quests</div>
+        <div class="tab"><div class="dot pe"></div>Trainer</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. QUESTS -->
+  <div class="phone-col">
+    <div class="phone-label">Quests — the reason to return</div>
+    <div class="phone">
+      <div class="qhead">
+        <div class="lbl">QUESTS</div>
+        <h3>Today</h3>
+        <p>2 of 3 done · resets in 9h 14m</p>
+      </div>
+      <div style="padding:0 16px">
+        <div class="qsec" style="margin-top:20px">
+          <div class="hd"><b>DAILY</b><span>Rewards pay on completion</span></div>
+          <div class="qlist">
+            <div class="q">
+              <div class="qico done">✓</div>
+              <div class="qmain"><div class="t">Catch 10 Pokémon</div>
+                <div class="track" style="height:4px"><i style="width:100%;background:var(--foil)"></i></div>
+                <div class="p">10/10 · Paid</div></div>
+              <div class="qrew"><b style="color:var(--gold)">40</b><b style="color:var(--paper-dim)">2</b></div>
+            </div>
+            <div class="q">
+              <div class="qico">◇</div>
+              <div class="qmain"><div class="t">Win 3 battles</div>
+                <div class="track" style="height:4px"><i style="width:33%"></i></div>
+                <div class="p">1/3</div></div>
+              <div class="qrew"><b style="color:var(--gold)">70</b><b style="color:var(--paper-dim)">2</b></div>
+            </div>
+            <div class="q">
+              <div class="qico">✧</div>
+              <div class="qmain"><div class="t">Catch a shiny Pokémon</div>
+                <div class="track" style="height:4px"><i style="width:0%"></i></div>
+                <div class="p">0/1</div></div>
+              <div class="qrew"><b style="color:var(--gold)">60</b><b style="color:var(--paper-dim)">3</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="qsec">
+          <div class="hd"><b>LIFETIME</b><span>3/12</span></div>
+          <div class="qlist">
+            <div class="q">
+              <div class="qico">▤</div>
+              <div class="qmain"><div class="t">Register 100 species</div>
+                <div class="track" style="height:4px"><i style="width:96%"></i></div>
+                <div class="p">96/100</div></div>
+              <div class="qrew"><b style="color:var(--gold)">400</b><b style="color:var(--paper-dim)">8</b></div>
+            </div>
+            <div class="q">
+              <div class="qico">✦</div>
+              <div class="qmain"><div class="t">Catch 10 shinies</div>
+                <div class="track" style="height:4px"><i style="width:30%;background:var(--foil)"></i></div>
+                <div class="p">3/10</div></div>
+              <div class="qrew"><b style="color:var(--gold)">600</b><b style="color:var(--paper-dim)">10</b></div>
+            </div>
+            <div class="q">
+              <div class="qico done">✓</div>
+              <div class="qmain"><div class="t">Catch your first shiny</div>
+                <div class="track" style="height:4px"><i style="width:100%;background:var(--foil)"></i></div>
+                <div class="p">1/1 · Paid</div></div>
+              <div class="qrew"><b style="color:var(--gold)">100</b><b style="color:var(--paper-dim)">5</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="dot"></div>Encounter</div>
+        <div class="tab"><div class="dot sq"></div>Dex</div>
+        <div class="tab on"><div class="dot chk"></div>Quests</div>
+        <div class="tab"><div class="dot pe"></div>Trainer</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. BATTLE -->
+  <div class="phone-col">
+    <div class="phone-label">Battle — the second hook</div>
+    <div class="phone">
+      <div class="bwrap">
+        <div class="btop"><span class="chev">‹</span><span class="lbl">WILD BATTLE</span><span style="width:24px"></span></div>
+        <div class="fp rev">
+          <div class="s"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/4.png"></div>
+          <div class="info">
+            <div class="nrow"><span class="nm2">Charmander</span><span class="hp">96/96</span></div>
+            <div class="track" style="height:5px"><i style="width:100%;background:#F2703E"></i></div>
+            <div class="chips" style="justify-content:flex-start"><span class="chip" style="background:#F2703E">fire</span></div>
+            <div class="minis"><div class="mini-s"><span class="lbl">ATK</span><b class="mono" style="font-size:11px;color:var(--paper-dim)">92</b></div><div class="mini-s"><span class="lbl">DEF</span><b class="mono" style="font-size:11px;color:var(--paper-dim)">78</b></div><div class="mini-s"><span class="lbl">SPD</span><b class="mono" style="font-size:11px;color:var(--paper-dim)">106</b></div></div>
+          </div>
+        </div>
+        <div style="height:8px"></div>
+        <div class="fp">
+          <div class="s"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/131.png"></div>
+          <div class="info">
+            <div class="nrow"><span class="nm2">Lapras</span><span class="hp">41/104</span></div>
+            <div class="track" style="height:5px"><i style="width:39%;background:var(--ball)"></i></div>
+            <div class="chips" style="justify-content:flex-start"><span class="chip" style="background:#3D8FD6">water</span><span class="chip" style="background:#5FC7C7">ice</span></div>
+            <div class="minis"><div class="mini-s"><span class="lbl">ATK</span><b class="mono" style="font-size:11px;color:var(--paper-dim)">85</b></div><div class="mini-s"><span class="lbl">DEF</span><b class="mono" style="font-size:11px;color:var(--paper-dim)">98</b></div><div class="mini-s"><span class="lbl">SPD</span><b class="mono" style="font-size:11px;color:var(--paper-dim)">60</b></div></div>
+          </div>
+        </div>
+        <div class="log">
+          <p class="good">Lapras struck for 63. Super effective.</p>
+          <p class="bad">Charmander struck back for 22.</p>
+        </div>
+        <div class="matchup"><span style="color:var(--foil)">▲</span> ice vs fire — Super effective</div>
+      </div>
+      <div class="foot">
+        <button class="btn ghost big">Brace<small style="display:block;font-weight:400;opacity:.6;font-size:10px">Halve the hit</small></button>
+        <button class="btn big">Attack</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="legend">
+  <h4>WHAT IS DRIVING THE RETENTION</h4>
+  <ul>
+    <li><b>Variable rewards.</b> Every pull is a fresh roll from a pool that grows with your level, and shinies sit at 1-in-48 — close enough to feel reachable, rare enough to chase.</li>
+    <li><b>A timer you can see.</b> A Poké Ball every 20 minutes, counting down on the main screen. The app's job is to give you a reason to reopen it in an hour.</li>
+    <li><b>Streaks with real stakes.</b> Daily rewards escalate for seven days and the streak lapses if you miss one. The strip says so out loud when yours is at risk.</li>
+    <li><b>Progress that is always visible.</b> Level, XP, coins and ball counts sit above every screen, so no pull ever feels unaccounted for.</li>
+    <li><b>Nothing to claim.</b> Quests pay out the instant they complete. A claim button is a chore that teaches people to forget their own rewards.</li>
+    <li><b>Unlocks, not walls.</b> Levelling widens the species pool rather than gating a feature, so progress always opens somewhere new.</li>
+  </ul>
+</div>
+
+</body>
+</html>
